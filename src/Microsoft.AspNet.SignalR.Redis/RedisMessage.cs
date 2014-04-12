@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -35,7 +36,7 @@ namespace Microsoft.AspNet.SignalR.Redis
             }
         }
 
-        public static RedisMessage FromBytes(byte[] data)
+        public static RedisMessage FromBytes(byte[] data, TraceSource trace)
         {
             using (var stream = new MemoryStream(data))
             {
@@ -43,13 +44,22 @@ namespace Microsoft.AspNet.SignalR.Redis
 
                 // read message id from memory stream until SPACE character
                 var messageIdBuilder = new StringBuilder(20);
+
                 do
                 {
                     // it is safe to read digits as bytes because they encoded by single byte in UTF-8
                     int charCode = stream.ReadByte();
+
                     if (charCode == -1)
                     {
-                        throw new EndOfStreamException();
+                        var binaryReaderTrace = new BinaryReader(stream);
+                        int countTrace = binaryReaderTrace.ReadInt32();
+                        byte[] bufferTrace = binaryReaderTrace.ReadBytes(countTrace);
+
+                        trace.TraceVerbose("Payload: " + System.Text.Encoding.UTF8.GetString(bufferTrace, 0, countTrace));
+                        trace.TraceVerbose("Message Builder: " + messageIdBuilder.ToString());
+                        
+                        throw new EndOfStreamException("Redis FromBytes Exception");                        
                     }
                     char c = (char)charCode;
                     if (c == ' ')
